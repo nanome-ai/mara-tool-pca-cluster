@@ -1,0 +1,49 @@
+{
+    "name": "Generate a 2D or 3D scatter plot using provided CSV file",
+    "description": "Create either a 2d or 3d scatter plot from a CSV input file, which might optionally display the points colored by another column. \n\n## Input\n* file - The CSV file containing data to plot\n* x_column_name - The column name in the CSV file to be used as the x-axis\n* y_column_name - The column name in the CSV file to be used as the y-axis\n* z_column_name - If provided, this will be the column name in the CSV file to be used as the z-axis, and the scatter plot will be 3D\n* color_column_name - If provided, this will be the column name in the CSV file to be used to color the points in the scatter plot. Depending whether this column data is categorical or continuous, a color legend or a color bar will be displayed respectively.\n* additional_params - An optional dictionary that contains additional parameters for the scatter plot.\n\n## Output\nA scatter plot in the svg format",
+    "category": "Informatics",
+    "args_list": [
+      {
+        "name": "file",
+        "type": "file",
+        "description": "The CSV file containing data to plot",
+        "default": null
+      },
+      {
+        "name": "x_column_name",
+        "type": "string",
+        "description": "The column name in the CSV file to be used as the x-axis",
+        "default": null
+      },
+      {
+        "name": "y_column_name",
+        "type": "string",
+        "description": "The column name in the CSV file to be used as the y-axis",
+        "default": null
+      },
+      {
+        "name": "z_column_name",
+        "type": "string",
+        "description": "If provided, this will be the column name in the CSV file to be used as the z-axis, and the scatter plot will be 3D",
+        "default": "none"
+      },
+      {
+        "name": "color_column_name",
+        "type": "string",
+        "description": "If provided, this will be the column name in the CSV file to be used to color the points in the scatter plot. Depending whether this column data is categorical or continuous, a color legend or a color bar will be displayed respectively.",
+        "default": "none"
+      },
+      {
+        "name": "additional_params",
+        "type": "dict",
+        "description": "An optional dictionary that contains additional parameters for the scatter plot.",
+        "default": "{}"
+      }
+    ],
+    "type": "python",
+    "config": {
+      "dockerfile_prep": "",
+      "requirements": "pandas\nmatplotlib",
+      "code": "'''Create either a 2D or 3D scatter plot from a CSV input file, which might optionally display the points colored by another column. '''\nimport pandas as pd\nimport matplotlib.pyplot as plt\nfrom datetime import datetime\n\ndef create_timestamp() -> str:\n  # helper function to create a unique timestamp\n  dt = str(datetime.now())\n  return dt.replace(\"-\", \"_\").replace(\":\", \"_\").replace(\" \", \"_\")\n\ndef run(file, x_column_name, y_column_name, z_column_name=\"none\", color_column_name=\"none\", additional_params={}):\n\n    ## Read data from a CSV file\n    data_df = pd.read_csv(file)\n    mode = \"2D\"\n    color_mode = \"none\"\n\n    ## Check if the columns are present\n    assert x_column_name in data_df.columns, f\"Column {x_column_name} not found in the data\"\n    assert y_column_name in data_df.columns, f\"Column {y_column_name} not found in the data\"\n    if z_column_name != \"none\":\n        assert z_column_name in data_df.columns, f\"Column {z_column_name} not found in the data. \\\nPlease make sure column names match the data in the CSV file if you want to create a 3D scatterplot!\"\n        mode = \"3D\"\n    if color_column_name != \"none\":\n        assert color_column_name in data_df.columns, f\"Column {color_column_name} not found in the data. \\\nPlease make sure column names match the data in the CSV file if you want to color the points by a column!\"\n        # decide whether the color data is categorical or continuous. Only float type is considered continuous\n        if pd.api.types.is_float_dtype(data_df[color_column_name]):\n            color_mode = \"continuous\"\n        else:\n            color_mode = \"categorical\"\n\n    ## Create the Plot based on different modes\n    ## set font sizes\n    plt.rcParams.update({'font.size': 14})\n    if color_mode == \"none\":\n        if mode == \"2D\":\n            fig, ax = plt.subplots()\n            ax.scatter(data_df[x_column_name], data_df[y_column_name], **additional_params)\n        else:\n            fig = plt.figure()\n            ax = fig.add_subplot(111, projection='3d')\n            ax.scatter(data_df[x_column_name], data_df[y_column_name], data_df[z_column_name], **additional_params)\n\n    elif color_mode == \"continuous\":\n        if mode == \"2D\":\n            fig, ax = plt.subplots()\n            scatter = ax.scatter(data_df[x_column_name], data_df[y_column_name], c=data_df[color_column_name], **additional_params)\n            colorbar = fig.colorbar(scatter, ax=ax)\n        else:\n            fig = plt.figure()\n            ax = fig.add_subplot(111, projection='3d')\n            scatter = ax.scatter(data_df[x_column_name], data_df[y_column_name], data_df[z_column_name], c=data_df[color_column_name], **additional_params)\n            colorbar = fig.colorbar(scatter, ax=ax)  \n        # show colorbar name\n        colorbar.set_label(color_column_name)\n\n    elif color_mode == \"categorical\":\n        categories = sorted(data_df[color_column_name].unique())\n        if mode == \"2D\":\n            fig, ax = plt.subplots()\n            for cat in categories:\n                ax.scatter(data_df[x_column_name][data_df[color_column_name] == cat], data_df[y_column_name][data_df[color_column_name] == cat], \n                           label=f\"{color_column_name}={cat}\", **additional_params)\n        else:\n            fig = plt.figure()\n            ax = fig.add_subplot(111, projection='3d')\n            for cat in categories:\n                ax.scatter(data_df[x_column_name][data_df[color_column_name] == cat], data_df[y_column_name][data_df[color_column_name] == cat],\n                            data_df[z_column_name][data_df[color_column_name] == cat], label=f\"{color_column_name}={cat}\", **additional_params)\n        # show legend\n        ax.legend()\n\n\n    \n    ## Set the Labels\n    ax.set_xlabel(x_column_name)\n    ax.set_ylabel(y_column_name)\n    if mode == \"3D\":\n        ax.set_zlabel(z_column_name)\n\n    ## Save figure\n    filename = f\"scatter.{create_timestamp()}.svg\"\n    plt.savefig(filename)\n    print(f\"{mode} scatter plot saved as {filename}\")\n    if color_mode != \"none\":\n        print(\"Points are colored by\", color_column_name)\n"
+    }
+  }
