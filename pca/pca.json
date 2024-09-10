@@ -1,0 +1,37 @@
+{
+    "name": "Perform PCA on your numerical dataset",
+    "description": "Using the sklearn package, analyze a data set via PCA to the designated variance threshold. You'll receive the resulting analysis concatenated to your original table and receive the explained variance ratios for your attached principal components. With this tool you can run a PCA on a CSV file or dataset.\n\n## Input\n* file - The CSV file to be analyzed\n* pca_columns - A list of columns for the numerical values in the CSV file to be used for PCA. If not provided, this will be an empty list and all numerical columns will be used. Usually you could run this tool directly with the input csv file, without extracting a new one with the \"Filter and extract CSV data based on a query\" tool\n* variance_threshold -This is the desired variance threshold for the analysis. Defaults to 0.95.\n* n_components - The number of designated components for the PCA. When provided, this will override the variance threshold. \n\n\n## Output\nA CSV file and a description of the analysis that includes number of principal components, a table of explained variance ratios for the principal components, the list of features used from the original file, and the name of the generated file.",
+    "category": "Informatics",
+    "args_list": [
+      {
+        "name": "file",
+        "type": "file",
+        "description": "The CSV file to be analyzed",
+        "default": null
+      },
+      {
+        "name": "pca_columns",
+        "type": "list",
+        "description": "A list of columns for the numerical values in the CSV file to be used for PCA. If not provided, this will be an empty list and all numerical columns will be used.",
+        "default": null
+      },
+      {
+        "name": "variance_threshold",
+        "type": "float",
+        "description": "This is the desired variance threshold for the analysis.",
+        "default": 0.95
+      },
+      {
+        "name": "n_components",
+        "type": "integer",
+        "description": "The number of designated components for the PCA. When provided, this will override the variance threshold. ",
+        "default": -1
+      }
+    ],
+    "type": "python",
+    "config": {
+      "dockerfile_prep": "",
+      "requirements": "pandas\nnumpy\nscikit-learn\ndatetime",
+      "code": "import pandas as pd\nimport numpy as np\nfrom sklearn.decomposition import PCA\nfrom sklearn.preprocessing import StandardScaler\nfrom datetime import datetime, date\n\ndef run(file, pca_columns, variance_threshold, n_components):\n\n    def perform_pca(data, variance_threshold, n_components):\n        ## Standardize the data\n        scaler = StandardScaler()\n        scaled_data = scaler.fit_transform(data)\n        \n        if n_components < 1:\n            ## Create a PCA object\n            pca = PCA()\n\n            ## Fit the PCA model and transform the data\n            transformed_data = pca.fit_transform(scaled_data)\n\n            ## Get the explained variance ratio\n            explained_variance_ratio = pca.explained_variance_ratio_\n\n            ## Calculate the cumulative explained variance ratio\n            cumulative_variance_ratio = np.cumsum(explained_variance_ratio)\n\n            ## Find the number of components needed to cover the specified variance threshold\n            n_components = np.argmax(cumulative_variance_ratio >= variance_threshold) + 1\n\n            transformed_data = transformed_data[:, :n_components]\n            explained_variance_ratio = explained_variance_ratio[:n_components]\n\n        else:\n            ## Create a PCA object\n            pca = PCA(n_components=n_components)\n\n            ## Fit the PCA model and transform the data\n            transformed_data = pca.fit_transform(scaled_data)\n\n            ## Get the explained variance ratio\n            explained_variance_ratio = pca.explained_variance_ratio_\n\n            \n            \n        ## Generate feature names for the principal components\n        feature_names = [f'PC{i+1}' for i in range(n_components)]\n        summed_variance_ratio = round(sum(explained_variance_ratio), 4)\n\n        return transformed_data, explained_variance_ratio, summed_variance_ratio, feature_names\n\n\n    ## Read data from a CSV file\n    data_df = pd.read_csv(file)\n    if len(pca_columns) == 0:\n        clean_data = data_df.select_dtypes(include=['float'])\n    else:\n        missing_columns = [column for column in pca_columns if column not in data_df.columns]\n        assert len(missing_columns) == 0, \"These columns are not present in the data: \" + str(missing_columns)\n        clean_data = data_df[pca_columns]\n    clean_data = clean_data.dropna(axis=1)\n    data_sets = clean_data.columns\n    data_array = clean_data.values\n\n    ## Perform PCA with default number of components\n    transformed_data, explained_variance_ratio, summed_variance_ratio, feature_names = perform_pca(data_array, variance_threshold, n_components)\n\n    variances = pd.DataFrame(explained_variance_ratio).transpose()\n    variances.columns = feature_names\n\n    ## Append PC1-n to OG CSV\n    PCA_df = pd.DataFrame(transformed_data, columns=feature_names)\n    PCA_data_df = pd.concat([data_df, PCA_df], axis=1)\n\n    ## Create the File Name\n    today = date.today()\n    day = today.strftime(\"%d%m%Y\")\n    now = datetime.now()\n    day_time = day + f\"_{now.hour}{now.minute}{now.second}\"\n\n    filename = f'{(file.split(\".csv\")[0])}_PCA_{variance_threshold}_{day_time}_.csv'\n\n    ## Create the File\n    PCA_data_df.to_csv(filename, index=False)\n\n    print(f\"The PCA is complete and generated {len(feature_names)} components to reach the {summed_variance_ratio} cumulative variance ratio.\"+\n        f\"\\nThey had the following variances by component:\\n{variances}\"+\n        f\"\\n\\nThe following columns were able to be used: {', '.join(list(data_sets))}\"+\n        f\"\\n\\nThe PC values have been added to your data table in {filename}.\")\n    \n    return    \n    "
+    }
+  }
